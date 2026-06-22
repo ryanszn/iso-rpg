@@ -1,66 +1,109 @@
 use macroquad::prelude::*;
 
 use crate::math::to_screen;
+use crate::types::ScreenPos;
 
-pub fn draw_stickman(x: usize, y: usize, cam: (f32, f32), enemy: bool) {
-    let (sx, mut sy) = to_screen(x, y, cam);
-    sy += 16.;
+pub fn draw_stickman(x: usize, y: usize, camera: ScreenPos, enemy: bool) {
+    let (screen_x, mut screen_y) = to_screen(x, y, camera);
+    screen_y += 16.0;
 
-    // shadow
-    draw_ellipse(sx, sy + 3., 10., 5., 0., Color::new(0., 0., 0., 0.2));
+    draw_shadow(screen_x, screen_y);
+    draw_head(screen_x, screen_y, enemy);
+    draw_body(screen_x, screen_y);
+}
 
-    // head
+fn draw_shadow(screen_x: f32, screen_y: f32) {
+    draw_ellipse(
+        screen_x,
+        screen_y + 3.0,
+        10.0,
+        5.0,
+        0.0,
+        Color::new(0.0, 0.0, 0.0, 0.2),
+    );
+}
+
+fn draw_head(screen_x: f32, screen_y: f32, enemy: bool) {
+    draw_circle_lines(screen_x, screen_y - 32.0, 7.0, 2.0, BLACK);
+
     if enemy {
-        draw_line(sx - 5., sy - 32., sx, sy - 30., 2., BLACK);
-        draw_line(sx + 5., sy - 32., sx, sy - 30., 2., BLACK);
-    } else {
-        draw_circle_lines(sx, sy - 32., 7., 2., BLACK);
-    }
+        draw_line(
+            screen_x - 5.0,
+            screen_y - 32.0,
+            screen_x,
+            screen_y - 30.0,
+            2.0,
+            BLACK,
+        );
 
-    draw_circle_lines(sx, sy - 32., 7., 2., BLACK);
-
-    for l in [
-        [0., -25., 0., -8.],
-        [0., -20., -8., -15.],
-        [0., -20., 8., -15.],
-        [0., -8., -6., -0.],
-        [0., -25., 6., -8.],
-    ] {
-        draw_line(sx + l[0], sy + l[1], sx + l[2], sy + l[3], 2., BLACK);
+        draw_line(
+            screen_x + 5.0,
+            screen_y - 32.0,
+            screen_x,
+            screen_y - 30.0,
+            2.0,
+            BLACK,
+        );
     }
 }
 
-pub fn draw_wall(x: usize, y: usize, cam: (f32, f32)) {
-    let (sx, sy) = to_screen(x, y, cam);
-
-    let v = [
-        vec2(sx, sy - 40.),
-        vec2(sx + 32., sy - 24.),
-        vec2(sx, sy - 8.),
-        vec2(sx - 32., sy - 24.),
-        vec2(sx + 32., sy),
-        vec2(sx, sy + 16.),
-        vec2(sx - 32., sy),
+fn draw_body(screen_x: f32, screen_y: f32) {
+    let body_lines = [
+        (0.0, -25.0, 0.0, -8.0),
+        (0.0, -20.0, -8.0, -15.0),
+        (0.0, -20.0, 8.0, -15.0),
+        (0.0, -8.0, -6.0, 0.0),
+        (0.0, -8.0, 6.0, 0.0),
     ];
 
-    let colors = [
-        Color::new(0.8, 0.8, 0.8, 1.),
-        Color::new(0.5, 0.5, 0.5, 1.),
-        Color::new(0.6, 0.6, 0.6, 1.),
+    for (x1, y1, x2, y2) in body_lines {
+        draw_line(
+            screen_x + x1,
+            screen_y + y1,
+            screen_x + x2,
+            screen_y + y2,
+            2.0,
+            BLACK,
+        );
+    }
+}
+
+pub fn draw_wall(x: usize, y: usize, camera: ScreenPos) {
+    let (screen_x, screen_y) = to_screen(x, y, camera);
+
+    let vertices = [
+        vec2(screen_x, screen_y - 40.0),
+        vec2(screen_x + 32.0, screen_y - 24.0),
+        vec2(screen_x, screen_y - 8.0),
+        vec2(screen_x - 32.0, screen_y - 24.0),
+        vec2(screen_x + 32.0, screen_y),
+        vec2(screen_x, screen_y + 16.0),
+        vec2(screen_x - 32.0, screen_y),
     ];
 
-    // Draw faces
-    draw_triangle(v[0], v[1], v[2], colors[0]);
-    draw_triangle(v[0], v[2], v[3], colors[0]);
+    let face_colors = [
+        Color::new(0.8, 0.8, 0.8, 1.0),
+        Color::new(0.5, 0.5, 0.5, 1.0),
+        Color::new(0.6, 0.6, 0.6, 1.0),
+    ];
 
-    draw_triangle(v[1], v[4], v[5], colors[1]);
-    draw_triangle(v[1], v[5], v[2], colors[1]);
+    draw_triangle(vertices[0], vertices[1], vertices[2], face_colors[0]);
+    draw_triangle(vertices[0], vertices[2], vertices[3], face_colors[0]);
 
-    draw_triangle(v[3], v[2], v[5], colors[2]);
-    draw_triangle(v[3], v[5], v[6], colors[2]);
+    draw_triangle(vertices[1], vertices[4], vertices[5], face_colors[1]);
+    draw_triangle(vertices[1], vertices[5], vertices[2], face_colors[1]);
 
-    // Draw outline
+    draw_triangle(vertices[3], vertices[2], vertices[5], face_colors[2]);
+    draw_triangle(vertices[3], vertices[5], vertices[6], face_colors[2]);
+
     for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0), (1, 4), (2, 5), (3, 6)] {
-        draw_line(v[a].x, v[a].y, v[b].x, v[b].y, 1., BLACK);
+        draw_line(
+            vertices[a].x,
+            vertices[a].y,
+            vertices[b].x,
+            vertices[b].y,
+            1.0,
+            BLACK,
+        );
     }
 }
