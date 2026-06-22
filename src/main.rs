@@ -4,6 +4,7 @@ use macroquad::prelude::*;
 mod constants;
 mod drawing;
 mod game;
+mod game_render;
 mod math;
 mod pathfinding;
 mod types;
@@ -21,7 +22,7 @@ async fn main() {
 
         match state {
             AppState::Menu => {
-                draw_text("Menu - Enter to start", 100., 100., 40., BLACK);
+                draw_text("GOON GAME - Enter to start", 100., 100., 40., BLACK);
                 if is_key_pressed(KeyCode::Enter) {
                     game = Game::new();
                     state = AppState::Playing;

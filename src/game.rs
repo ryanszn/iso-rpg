@@ -1,7 +1,6 @@
 use macroquad::prelude::*;
 
 use crate::constants::MAP_SIZE;
-use crate::drawing::{draw_stickman, draw_wall};
 use crate::math::{dist, to_screen, to_tile};
 use crate::pathfinding::bfs;
 use crate::types::{DmgText, Monster, ScreenPos, Tile, TilePos};
@@ -72,19 +71,16 @@ impl Game {
         }
     }
 
-    pub fn update(&mut self, dt: f32) -> bool {
-        if self.hp <= 0 || self.monsters.is_empty() {
-            return true;
-        }
-
+    fn update_floating_text(&mut self, dt: f32) {
         // Update text animations
         self.texts.retain_mut(|text| {
             text.life -= dt;
             text.y -= 20.0 * dt;
             text.life > 0.0
         });
+    }
 
-        // Mouse input logic
+    fn handle_mouse_input(&mut self) {
         if is_mouse_button_pressed(MouseButton::Left) {
             let (mouse_x, mouse_y) = mouse_position();
             let (target_x, target_y) = to_tile(mouse_x, mouse_y, self.camera);
@@ -100,53 +96,42 @@ impl Game {
                 );
             }
         }
+    }
 
-        // Handle movement for player
-        if !self.path.is_empty() {
-            self.player_cooldown -= dt;
-
-            if self.player_cooldown <= 0.0 {
-                self.player_cooldown = 0.15;
-
-                let (next_x, next_y) = self.path[0];
-
-                if let Some(monster_index) = self
-                    .monsters
-                    .iter()
-                    .position(|monster| monster.x == next_x && monster.y == next_y)
-                {
-                    self.damage_monster(monster_index, 10);
-                    self.path.clear();
-                } else {
-                    self.path.remove(0);
-                    self.player_x = next_x;
-                    self.player_y = next_y;
-
-                    self.collect_potion();
-
-                    if let Some(gold_index) = self
-                        .gold
-                        .iter()
-                        .position(|&gold| gold == (self.player_x, self.player_y))
-                    {
-                        self.gold.remove(gold_index);
-                        self.score += 100;
-
-                        let (screen_x, screen_y) =
-                            to_screen(self.player_x, self.player_y, self.camera);
-
-                        self.texts.push(DmgText {
-                            x: screen_x,
-                            y: screen_y - 40.0,
-                            dmg: -100,
-                            life: 1.0,
-                            color: GOLD,
-                        });
-                    }
-                }
-            }
+    fn update_player(&mut self, dt: f32) {
+        if self.path.is_empty() {
+            return;
         }
 
+        self.player_cooldown -= dt;
+
+        if self.player_cooldown > 0.0 {
+            return;
+        }
+
+        self.player_cooldown = 0.15;
+
+        let (next_x, next_y) = self.path[0];
+
+        if let Some(monster_index) = self
+            .monsters
+            .iter()
+            .position(|monster| monster.x == next_x && monster.y == next_y)
+        {
+            self.damage_monster(monster_index, 10);
+            self.path.clear();
+            return;
+        }
+
+        self.path.remove(0);
+        self.player_x = next_x;
+        self.player_y = next_y;
+
+        self.collect_potion();
+        self.collect_gold();
+    }
+
+    fn update_monsters(&mut self, dt: f32) {
         let occupied: Vec<TilePos> = self
             .monsters
             .iter()
@@ -187,6 +172,16 @@ impl Game {
                 }
             }
         }
+    }
+
+    pub fn update(&mut self, dt: f32) -> bool {
+        if self.hp <= 0 || self.monsters.is_empty() {
+            return true;
+        }
+        self.update_floating_text(dt); // floating text
+        self.handle_mouse_input(); // mouse input logic
+        self.update_player(dt); // player movement
+        self.update_monsters(dt);
 
         false
     }
@@ -205,6 +200,25 @@ impl Game {
             if self.hp > 150 {
                 self.hp = 150;
             }
+        }
+    }
+
+    fn collect_gold(&mut self) {
+        let player_position = (self.player_x, self.player_y);
+
+        if let Some(gold_index) = self.gold.iter().position(|&gold| gold == player_position) {
+            self.gold.remove(gold_index);
+            self.score += 100;
+
+            let (screen_x, screen_y) = to_screen(self.player_x, self.player_y, self.camera);
+
+            self.texts.push(DmgText {
+                x: screen_x,
+                y: screen_y - 40.0,
+                dmg: -100,
+                life: 1.0,
+                color: GOLD,
+            });
         }
     }
 
@@ -229,56 +243,10 @@ impl Game {
     }
 
     pub fn draw(&self) {
-        for y in 0..MAP_SIZE {
-            for x in 0..MAP_SIZE {
-                if self.map[y][x] == Tile::Wall {
-                    draw_wall(x, y, self.camera);
-                } else if self.potions.contains(&(x, y)) {
-                    let (screen_x, screen_y) = to_screen(x, y, self.camera);
-                    draw_circle(screen_x, screen_y + 8.0, 14.0, RED);
-                } else if self.gold.contains(&(x, y)) {
-                    let (screen_x, screen_y) = to_screen(x, y, self.camera);
-                    draw_circle(screen_x, screen_y, 16.0, GOLD);
-                } else {
-                    let (screen_x, screen_y) = to_screen(x, y, self.camera);
-                    draw_circle(screen_x, screen_y + 16.0, 2.0, LIGHTGRAY);
-                }
-            }
-        }
-
-        for (path_x, path_y) in &self.path {
-            let (screen_x, screen_y) = to_screen(*path_x, *path_y, self.camera);
-            draw_circle(screen_x, screen_y + 16.0, 4.0, GOLD);
-        }
-
-        draw_stickman(self.player_x, self.player_y, self.camera, false);
-
-        for monster in &self.monsters {
-            draw_stickman(monster.x, monster.y, self.camera, true);
-        }
-
-        for text in &self.texts {
-            if text.dmg < 0 {
-                draw_text(&format!("+{}", -text.dmg), text.x, text.y, 20.0, text.color);
-            } else {
-                draw_text(&format!("-{}", text.dmg), text.x, text.y, 20.0, text.color);
-            }
-        }
-
-        draw_text(
-            &format!("HP: {}", self.hp),
-            20.0,
-            screen_height() - 40.0,
-            30.0,
-            BLACK,
-        );
-
-        draw_text(
-            &format!("SCORE: {}", self.score),
-            20.0,
-            screen_height() - 70.0,
-            30.0,
-            BLACK,
-        );
+        self.draw_world();
+        self.draw_path();
+        self.draw_entities();
+        self.draw_floating_text();
+        self.draw_ui();
     }
 }
